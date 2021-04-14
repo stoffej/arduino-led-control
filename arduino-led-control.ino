@@ -85,14 +85,14 @@ void loop() {
   recvChar(); // read serial cmd
 
   if (cmdComplete) {
-    process_command();
+    processCommand();
   }
 }
 
 /*
    Checks received command and calls corresponding functions.
 */
-void process_command() {
+void processCommand() {
   if (strncmp(cmd, "h", 1) == 0) {
     printUsage();
   } else if (strncmp(cmd, "v", 1) == 0) {
