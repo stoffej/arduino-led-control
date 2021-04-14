@@ -15,6 +15,15 @@
 #define LED_PIN 12
 #define MAX_NUM_CHARS 16 // maximum number of characters read from the Serial Monitor
 
+#define MICROPHONE_PIN A1 // MAX4466
+#define VOLUME_SAMPLES 20
+#define VOLUME_MIN 550
+#define VOLUME_MAX 650
+#define VOLUME_BRIGHTNESS_MIN 50
+#define VOLUME_BRIGHTNESS_MAX 255
+#define LEVEL_AMOUNT 20
+#define LEVEL_SMOOTH_MODE false
+
 // Parameter 1 = number of pixels in strip
 // Parameter 2 = Arduino pin number (most are valid)
 // Parameter 3 = pixel type flags, add together as needed:
@@ -34,7 +43,8 @@ boolean cmdComplete = false;  // whether the command string is complete
 #define ADDRESS_COLOR_BLUE 2
 #define ADDRESS_MODE 3
 #define ADDRESS_BRIGHTNESS 4
-#define ADDRESS_SPEED 5
+#define ADDRESS_MICROPHONE_MODE 5
+#define ADDRESS_SPEED 6 // for int, must be at end
 
 byte currentRedColor; // 0 - 255
 byte currentGreenColor;
@@ -42,6 +52,10 @@ byte currentBlueColor;
 byte currentMode;
 byte currentBrightness;
 int currentSpeed; // 10 - 65535
+bool currentMicrophoneMode; // 0 - 1
+
+int volume; // current volume
+int level = 0; // sound level
 
 void setup() {
   Serial.begin(115200);
@@ -65,6 +79,17 @@ void setup() {
 
   // speed
   EEPROM.get(ADDRESS_SPEED, currentSpeed);
+  if (currentSpeed < 10) {
+    currentSpeed = 1000;
+  }
+
+  // microphone mode
+  byte tmpMicrophoneMode = EEPROM.read(ADDRESS_MICROPHONE_MODE);
+  if (tmpMicrophoneMode > 0) {
+    currentMicrophoneMode = true;
+  } else {
+    currentMicrophoneMode = false;
+  }
 
   // init led
   ws2812fx.init();
@@ -86,6 +111,11 @@ void loop() {
 
   if (cmdComplete) {
     processCommand();
+  }
+
+  if (currentMicrophoneMode && currentMode == 0) {
+    ws2812fx.setBrightness(getBrightnessFromMicrophone());
+    delay(10);
   }
 }
 
@@ -118,7 +148,7 @@ void processCommand() {
     //Serial.println(ws2812fx.getModeName(ws2812fx.getMode()));
   } else if (strncmp(cmd, "b ", 2) == 0) {
     currentBrightness = atoi(cmd + 2);
-    Serial.println(currentBrightness);
+    //Serial.println(currentBrightness);
     EEPROM.update(ADDRESS_BRIGHTNESS, currentBrightness);
     ws2812fx.setBrightness(currentBrightness);
     //Serial.print(F("Set brightness to: "));
@@ -129,6 +159,10 @@ void processCommand() {
     ws2812fx.setSpeed(currentSpeed);
     //Serial.print(F("Set speed to: "));
     //Serial.println(ws2812fx.getSpeed());
+  } else if (strncmp(cmd, "t ", 2) == 0) {
+    currentMicrophoneMode = atoi(cmd + 2);
+    //Serial.println(currentMicrophoneMode);
+    EEPROM.update(ADDRESS_MICROPHONE_MODE, currentMicrophoneMode);
   }
 
   cmd[0] = '\0';       // reset the commandstring
@@ -146,6 +180,7 @@ usage:
  m <n>     - set mode
  b <n>     - set brightness
  s <n>     - set speed
+ t <0|1>   - enable/disable microphone mode (work only on mode FX_MODE_STATIC = 0)
 )=====";
 
 void printUsage() {
@@ -224,6 +259,9 @@ void printVars() {
 
   Serial.print(F("@SPEED: "));
   Serial.println(currentSpeed);
+
+  Serial.print(F("@MICROPHONE_MODE: "));
+  Serial.println(currentMicrophoneMode);
 }
 
 /*
@@ -243,4 +281,66 @@ String getValue(String data, char separator, int index) {
   }
 
   return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+}
+
+/*
+   Get volume from microphone.
+ */
+int getVolume() {
+  int volume = 0;
+
+  // take the maximum volume of the last x samples
+  for (int i = 0; i < VOLUME_SAMPLES; i++) {
+    int sound = analogRead(MICROPHONE_PIN);
+
+    if (sound > volume) {
+      volume = sound;
+    }
+
+    delay(1);
+  }
+
+  return volume;
+}
+
+/*
+   Maps the volume to a level.
+ */
+int getLevel(int volume) {
+  int levelTmp = map(volume, VOLUME_MIN, VOLUME_MAX, 0, LEVEL_AMOUNT);
+
+  // Increase or decrease level
+  if (levelTmp > level) {
+    if (LEVEL_SMOOTH_MODE) {
+      levelTmp = level + 1;
+    }
+  } else {
+    levelTmp = level - 1;
+  }
+
+  // Avoid negative level
+  if (levelTmp < 0) {
+    levelTmp = 0;
+  } else if (levelTmp > LEVEL_AMOUNT) {
+    levelTmp = LEVEL_AMOUNT;
+  }
+
+  return levelTmp;
+}
+
+/*
+   Maps the level to a brightness.
+ */
+byte getBrightnessFromMicrophone() {
+  volume = getVolume();
+  level = getLevel(volume);
+  byte brightness = map(level, 0, LEVEL_AMOUNT, VOLUME_BRIGHTNESS_MIN, VOLUME_BRIGHTNESS_MAX);
+
+//  Serial.print(volume);
+//  Serial.print(" | ");
+//  Serial.print(level);
+//  Serial.print(" | ");
+//  Serial.println(brightness);
+
+  return brightness;
 }
