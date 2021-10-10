@@ -90,7 +90,7 @@ void setup() {
 
   //printModes();
   //printUsage();
-  printVars();
+  //printVars();
 }
 
 void loop() {
