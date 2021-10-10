@@ -91,6 +91,8 @@ void setup() {
   //printModes();
   //printUsage();
   //printVars();
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 void loop() {
