@@ -1,38 +1,47 @@
 import serial.tools.list_ports
+import time
+import sys
+from icecream import ic
 
-global s
-ports = list(serial.tools.list_ports.comports())
-for p in ports:
-    if "Arduino" in p.description:
-        print("{}: ".format(p))
-        s = serial.Serial(p.device,115200)
-        break
+def init():
+    serial_handler = None
+    ports = list(serial.tools.list_ports.comports())
+    for p in ports:
+        if "Arduino" in p.description:
+            print("{}: ".format(p))
+            serial_handler = serial.Serial(p.device,115200)
+            time.sleep(2)
+            break
+    return serial_handler
 
-serialString = ""
-line = ""
-cmd ="c 0.100.0"
-s.write((cmd + "\n").encode())
-# s.write("m 0".encode())
-while True:
+def set(serial_l,red,green,blue):
+    cmd = f"c {red}.{green}.{blue}"
+    serial_l.write((cmd + "\n").encode())
 
-    try:
-            # serialPort.reset_input_buffer()
-            # serialPort.reset_output_buffer()
-            # serialString = serialPort.read(10).hex()
-        for b in s.read():
-            if b == b"":
-                continue
+def end(serial_handler):
+    if(serial_handler):
+        serial_handler.close()
 
-            c = chr(b)
+def main():
+    t_activity = sys.argv[1]
+    t_status = sys.argv[2]
+    ic(t_activity)
+    ic(t_status)
+    serial_l = init()
+    if(serial_l is not None):
+        # if t_activity == "Away":
+        #     set(serial_l,255,200,0)
+        # elif t_activity == "Available":
+        #     set(serial_l,0,255,0)
+        if t_activity == "In a meeting" or t_activity == "In a call":
+            set(serial_l,255,0,0)
+        else:
+            set(serial_l,0,255,0)
+    else:
+        print("no arduino board found")
+    end(serial_l)
 
-            if c == "\n":
-                print(line)
-                line = ""
-                # cmd ="c 10.100.0" denn funkar
-                # s.write((cmd + "\n").encode())
-            elif c != "\r":
-                line += c
-    except KeyboardInterrupt:
-        break
-
-s.close()
+# Using the special variable
+# __name__
+if __name__=="__main__":
+    main()
