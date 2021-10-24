@@ -1,4 +1,4 @@
-﻿<#
+<#
 .NOTES
     Name: Get-TeamsStatus.ps1
     Author: Danny de Vries
@@ -31,31 +31,32 @@ $Enable = 1
 $Activity = ' '
 $Status = ' '
 
+
 # Run the script when a parameter is used and stop when done
 If($null -ne $SetStatus){
     Write-Host ("Setting Microsoft Teams status to "+$SetStatus+":")
-#    $params = @{
-#     "state"="$SetStatus";
-#     "attributes"= @{
-#        "friendly_name"="$entityStatusName";
-##        "icon"="mdi:microsoft-teams";
-#        }
-#     }#
+    $params = @{
+     "state"="$SetStatus";
+     "attributes"= @{
+        "friendly_name"="$entityStatusName";
+        "icon"="mdi:microsoft-teams";
+        }
+     }
 
-#    $params = $params | ConvertTo-Json
-#    Invoke-RestMethod -Uri "$HAUrl/api/states/$entityStatus" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
+    $params = $params | ConvertTo-Json
+    Invoke-RestMethod -Uri "$HAUrl/api/states/$entityStatus" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
     break
 }
 
 # Start monitoring the Teams logfile when no parameter is used to run the script
 DO {
 # Get Teams Logfile and last icon overlay status
-$TeamsStatus = Get-Content -Path $env:APPDATA"\Microsoft\Teams\logs.txt" -Tail 1000 | Select-String -Pattern `
+$TeamsStatus = Get-Content -Path "C:\Users\H960794\AppData\Roaming\Microsoft\Teams\logs.txt" -Tail 1000 | Select-String -Pattern `
   'Setting the taskbar overlay icon -',`
   'StatusIndicatorStateService: Added' | Select-Object -Last 1
 
 # Get Teams Logfile and last app update deamon status
-$TeamsActivity = Get-Content -Path $env:APPDATA"\Microsoft\Teams\logs.txt" -Tail 1000 | Select-String -Pattern `
+$TeamsActivity = Get-Content -Path "C:\Users\H960794\AppData\Roaming\Microsoft\Teams\logs.txt" -Tail 1000 | Select-String -Pattern `
   'Resuming daemon App updates',`
   'Pausing daemon App updates',`
   'SfB:TeamsNoCall',`
@@ -66,8 +67,6 @@ $TeamsActivity = Get-Content -Path $env:APPDATA"\Microsoft\Teams\logs.txt" -Tail
 # Get Teams application process
 $TeamsProcess = Get-Process -Name Teams -ErrorAction SilentlyContinue
 
-$Status = $lgOffline
-$Activity = $lgNotInACall
 # Check if Teams is running and start monitoring the log if it is
 If ($null -ne $TeamsProcess) {
     If($TeamsStatus -eq $null){ }
@@ -136,6 +135,13 @@ If ($null -ne $TeamsProcess) {
         Write-Host $Activity
     }
     ElseIf ($TeamsActivity -like "*Pausing daemon App updates*" -or `
+        $TeamsActivity -like "*SfB:TeamsPendingCall*" -or `
+        $TeamsActivity -like "*name: desktop_call_state_change_send, isOngoing: true*") {
+        $Activity = $lgInACall
+        $ActivityIcon = $iconInACall
+        Write-Host $Activity
+    }
+    ElseIf ($TeamsActivity -like "*Pausing daemon App updates*" -or `
         $TeamsActivity -like "*SfB:TeamsActiveCall*" -or `
         $TeamsActivity -like "*name: desktop_call_state_change_send, isOngoing: true*") {
         $Activity = $lgInACall
@@ -155,33 +161,33 @@ $CallPython = 0
 # Call Home Assistant API to set the status and activity sensors
 If ($CurrentStatus -ne $Status -and $Status -ne $null) {
     $CurrentStatus = $Status
-    Write-Host ("update status" )
     $CallPython = 1
-    #    $params = @{
-#     "state"="$CurrentStatus";
-#     "attributes"= @{
-#        "friendly_name"="$entityStatusName";
-#        "icon"="mdi:microsoft-teams";
-##        }
-#     }#
-#
-#    $params = $params | ConvertTo-Json
-#    Invoke-RestMethod -Uri "$HAUrl/api/states/$entityStatus" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
+    $params = @{
+     "state"="$CurrentStatus";
+     "attributes"= @{
+        "friendly_name"="$entityStatusName";
+        "icon"="mdi:microsoft-teams";
+        }
+     }
+
+    $params = $params | ConvertTo-Json
+    Invoke-RestMethod -Uri "$HAUrl/api/states/$entityStatus" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
 }
 
 If ($CurrentActivity -ne $Activity) {
     $CurrentActivity = $Activity
     $CallPython = 1
- #   $params = @{
- #    "state"="$Activity";
- #    "attributes"= @{
- #       "friendly_name"="$entityActivityName";
- #       "icon"="$ActivityIcon";
- #       }
- #    }
- #   $params = $params | ConvertTo-Json
- #   Invoke-RestMethod -Uri "$HAUrl/api/states/$entityActivity" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
+    $params = @{
+     "state"="$Activity";
+     "attributes"= @{
+        "friendly_name"="$entityActivityName";
+        "icon"="$ActivityIcon";
+        }
+     }
+    $params = $params | ConvertTo-Json
+    Invoke-RestMethod -Uri "$HAUrl/api/states/$entityActivity" -Method POST -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($params)) -ContentType "application/json"
 }
+
 If ( $CallPython)
 {
     Write-Host $Status
@@ -189,5 +195,6 @@ If ( $CallPython)
     python pyled.py $Activity $Status
     $CallPython = 0
 }
+
     Start-Sleep 1
 } Until ($Enable -eq 0)
